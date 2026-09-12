@@ -15,6 +15,7 @@ from typing import Optional
 class Direction(str, Enum):
     CREDIT = "credit"
     DEBIT = "debit"
+    NON_CASH = "non_cash"
 
 
 class EventStatus(str, Enum):
