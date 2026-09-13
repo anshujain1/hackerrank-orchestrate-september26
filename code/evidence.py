@@ -634,3 +634,4 @@ class EvidenceResolver:
             effective_date=event.event_date,
             evidence_ids=(image.image_id,),
         )
+        

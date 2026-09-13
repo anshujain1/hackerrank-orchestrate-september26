@@ -59,9 +59,8 @@ def classify_role(event: FinancialEvent) -> FinancialRole:
     """
     Assign the financial role of a raw event.
 
-    This is deliberately deterministic. Semantic interpretation of messages
-    happens in evidence.py; this function only interprets structured event
-    fields.
+    Semantic interpretation of messages/images happens in evidence.py.
+    This function only interprets structured event fields.
     """
 
     if event.event_type == "refund":
@@ -102,13 +101,13 @@ def counts_in_forecast(
     forced_uncertain: bool = False,
 ) -> bool:
     """
-    Decide whether this concrete event is eligible to affect the forecast.
+    Decide whether a concrete event is eligible to affect the forecast.
 
-    Important:
-    - cancelled/failed events do not count
-    - unrealized/non-cash events do not count
+    Rules:
+    - cancelled/failed/unrealized events do not count
+    - non-cash events do not count
     - pending credits do not count
-    - uncertain future evidence suppresses the event
+    - uncertain future events do not count
     """
 
     if event.status in {
@@ -137,24 +136,15 @@ def counts_in_forecast(
 # Evidence helpers
 # ---------------------------------------------------------------------------
 
-def _trusted(relations: list[EvidenceRelation]) -> list[EvidenceRelation]:
+def _trusted(
+    relations: list[EvidenceRelation],
+) -> list[EvidenceRelation]:
     """Keep only sufficiently confident evidence relations."""
 
     return [
         relation
         for relation in relations
         if relation.confidence >= CONFIDENCE_THRESHOLD
-    ]
-
-
-def _relations_for_event(
-    event_id: str,
-    relations: list[EvidenceRelation],
-) -> list[EvidenceRelation]:
-    return [
-        relation
-        for relation in relations
-        if relation.target_id == event_id
     ]
 
 
@@ -165,8 +155,8 @@ def _latest_relation(
     """
     Return the strongest/latest usable relation of a particular type.
 
-    We primarily trust confidence. Evidence order is retained as a
-    deterministic tie-breaker.
+    Confidence is the primary ordering criterion. Original evidence order
+    is retained as a deterministic tie-breaker.
     """
 
     candidates = [
@@ -194,35 +184,48 @@ def canonicalize_user(
     image_relations: list[EvidenceRelation],
     fx,
     home_currency: str,
-) -> tuple[list[FinancialFact], list[AmountOverride], dict[str, object]]:
+) -> tuple[
+    list[FinancialFact],
+    list[tuple[str, AmountOverride]],
+    list[tuple[str, object]],
+]:
     """
     Convert raw FinancialEvent records into canonical FinancialFact records.
 
-    Returns:
-        facts:
-            Canonical event-level financial facts.
+    Returns
+    -------
+    facts:
+        Canonical event-level financial facts.
 
-        series_overrides:
-            Amount changes that apply to a recurring series from an
-            effective date onward.
+    series_overrides:
+        Tuples of (event_id, AmountOverride) so series.py can determine
+        which recurring series the amendment belongs to.
 
-        series_terminations:
-            Series-level termination information.
+    series_terminations:
+        Tuples of (event_id, termination_date).
 
-    Design principles:
-        1. Evidence modifies state; it does not make affordability decisions.
-        2. Blank amounts remain blank until image evidence resolves them.
-        3. Duplicate suppression requires explicit duplicate evidence.
-        4. Internal transfers remain in history.
-        5. Forecast eligibility is explicit.
-        6. Evidence provenance is preserved.
+    Design principles
+    -----------------
+    1. Evidence modifies state; it does not make affordability decisions.
+    2. Blank amounts remain None until image evidence resolves them.
+    3. Duplicate suppression requires explicit duplicate evidence.
+    4. Internal transfers remain in history.
+    5. Forecast eligibility is explicit.
+    6. Evidence provenance is preserved.
     """
+
+    # ------------------------------------------------------------------
+    # Combine and filter evidence
+    # ------------------------------------------------------------------
 
     all_relations = _trusted(
         list(message_relations) + list(image_relations)
     )
 
-    relation_by_event: dict[str, list[EvidenceRelation]] = {}
+    relation_by_event: dict[
+        str,
+        list[EvidenceRelation],
+    ] = {}
 
     for relation in all_relations:
         if relation.target_id:
@@ -232,10 +235,10 @@ def canonicalize_user(
             ).append(relation)
 
     # ------------------------------------------------------------------
-    # First pass: identify events explicitly declared duplicates.
+    # Explicit duplicate suppression
     #
-    # We DO NOT deduplicate merely because two rows look similar.
-    # Similarity is not proof.
+    # We NEVER deduplicate merely because rows look similar.
+    # Similarity is evidence for investigation, not proof.
     # ------------------------------------------------------------------
 
     duplicate_event_ids: set[str] = set()
@@ -248,20 +251,28 @@ def canonicalize_user(
             duplicate_event_ids.add(relation.target_id)
 
     # ------------------------------------------------------------------
-    # Second pass: construct canonical facts.
+    # Raw event lookup
     # ------------------------------------------------------------------
 
-    facts: list[FinancialFact] = []
-
-    # Series-level mutations collected for series.py.
-    series_overrides: list[AmountOverride] = []
-    series_terminations: dict[str, object] = {}
-
-    # Map event IDs to raw events so explicit evidence can be validated.
     events_by_id = {
         event.event_id: event
         for event in events
     }
+
+    # Keep these in the exact format expected by series.py.
+    series_overrides: list[
+        tuple[str, AmountOverride]
+    ] = []
+
+    series_terminations: list[
+        tuple[str, object]
+    ] = []
+
+    facts: list[FinancialFact] = []
+
+    # ------------------------------------------------------------------
+    # Process events chronologically
+    # ------------------------------------------------------------------
 
     for event in sorted(
         events,
@@ -270,8 +281,11 @@ def canonicalize_user(
             item.event_id,
         ),
     ):
-        # Explicit duplicate evidence means this raw row should not become
-        # an independent financial fact.
+
+        # --------------------------------------------------------------
+        # Explicit duplicate
+        # --------------------------------------------------------------
+
         if event.event_id in duplicate_event_ids:
             continue
 
@@ -312,6 +326,10 @@ def canonicalize_user(
 
         # --------------------------------------------------------------
         # Delay
+        #
+        # IMPORTANT:
+        # FinancialEvent uses event_date.
+        # FinancialFact uses date.
         # --------------------------------------------------------------
 
         delay = _latest_relation(
@@ -319,7 +337,10 @@ def canonicalize_user(
             EvidenceRelationType.DELAY,
         )
 
-        if delay is not None and delay.new_date is not None:
+        if (
+            delay is not None
+            and delay.new_date is not None
+        ):
             event = replace(
                 event,
                 event_date=delay.new_date,
@@ -335,14 +356,17 @@ def canonicalize_user(
         )
 
         if amendment is not None:
+
             effective_date = (
                 amendment.effective_date
                 or amendment.new_date
                 or event.event_date
             )
 
-            # A concrete event amendment applies directly to this event
-            # when it changes this occurrence.
+            # ----------------------------------------------------------
+            # Amendment to this concrete occurrence
+            # ----------------------------------------------------------
+
             if (
                 amendment.new_amount is not None
                 and effective_date == event.event_date
@@ -365,20 +389,26 @@ def canonicalize_user(
                     event_date=amendment.new_date,
                 )
 
-            # A future effective date represents a recurring-series change.
+            # ----------------------------------------------------------
+            # Future recurring-series amount change
+            # ----------------------------------------------------------
+
             elif (
                 amendment.new_amount is not None
                 and effective_date > event.event_date
             ):
                 series_overrides.append(
-                    AmountOverride(
-                        effective_date=effective_date,
-                        amount=amendment.new_amount,
-                        currency=(
-                            amendment.new_currency
-                            or event.currency
+                    (
+                        event.event_id,
+                        AmountOverride(
+                            effective_date=effective_date,
+                            amount=amendment.new_amount,
+                            currency=(
+                                amendment.new_currency
+                                or event.currency
+                            ),
+                            evidence_ids=amendment.evidence_ids,
                         ),
-                        evidence_ids=amendment.evidence_ids,
                     )
                 )
 
@@ -403,29 +433,29 @@ def canonicalize_user(
         )
 
         if termination is not None:
+
             effective_date = (
                 termination.effective_date
                 or termination.new_date
             )
 
             if effective_date is not None:
-                series_terminations[event.event_id] = effective_date
+                series_terminations.append(
+                    (
+                        event.event_id,
+                        effective_date,
+                    )
+                )
 
         # --------------------------------------------------------------
         # Amount
         #
         # CRITICAL:
-        # A blank amount is NOT zero.
-        #
-        # It stays None until image evidence resolves it.
+        # Blank amount is NOT zero.
         # --------------------------------------------------------------
 
         amount = event.amount
         currency = event.currency
-
-        # --------------------------------------------------------------
-        # Convert into home currency only when an amount actually exists.
-        # --------------------------------------------------------------
 
         home_amount = None
 
@@ -466,30 +496,41 @@ def canonicalize_user(
             forced_uncertain=forced_uncertain,
         )
 
-        # A concrete event without a resolved amount cannot safely
-        # participate in arithmetic yet.
+        # A concrete event with unresolved amount cannot safely
+        # participate in arithmetic.
         if amount is None:
             include = False
 
-        facts.append(
-            FinancialFact(
-                event_id=event.event_id,
-                user_id=event.user_id,
-                event_date=event.event_date,
-                settlement_date=event.settlement_date,
-                amount=amount,
-                currency=currency,
-                home_currency_amount=home_amount,
-                direction=event.direction,
-                category=event.category,
-                description=event.description,
-                role=role,
-                status=event.status,
-                counts_in_forecast=include,
-                flexibility=event.flexibility,
-                minimum_allowed_amount=event.minimum_allowed_amount,
-                evidence_ids=evidence_ids,
-            )
-        )
+        # --------------------------------------------------------------
+        # Canonical fact
+        #
+        # Raw event: event.event_date
+        # Canonical fact: date
+        # --------------------------------------------------------------
 
-    return facts, series_overrides, series_terminations
+        facts.append(
+    FinancialFact(
+        event_id=event.event_id,
+        user_id=event.user_id,
+        date=event.event_date,
+        settlement_date=event.settlement_date,
+        amount=amount,
+        currency=currency,
+        home_currency_amount=home_amount,
+        direction=event.direction,
+        category=event.category,
+        description=event.description,
+        financial_role=role,
+        status=event.status,
+        counts_in_forecast=include,
+        flexibility=event.flexibility,
+        minimum_allowed_amount=event.minimum_allowed_amount,
+        evidence_ids=evidence_ids,
+    )
+)
+
+    return (
+        facts,
+        series_overrides,
+        series_terminations,
+    )
