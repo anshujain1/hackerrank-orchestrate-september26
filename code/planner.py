@@ -1,4 +1,6 @@
 from __future__ import annotations
+from calendar import monthrange
+from datetime import date, timedelta
 
 from dataclasses import dataclass, replace
 from datetime import date, timedelta
@@ -118,7 +120,9 @@ def _occurrence_dates(
     """
     Generate recurring occurrences inside the planning horizon.
 
-    Forecasting starts strictly after the series anchor.
+    Keep monthly recurrence aligned with forecast.py:
+    interval_days == 30 means calendar-month recurrence, not
+    repeated 30-day jumps.
     """
 
     dates: list[date] = []
@@ -126,11 +130,25 @@ def _occurrence_dates(
     if series.interval_days <= 0:
         return ()
 
-    current = series.anchor_date + timedelta(
-        days=series.interval_days
-    )
+    current = series.anchor_date
 
-    while current <= horizon_end:
+    while True:
+        if series.interval_days in (30, 31):
+            year = current.year + (current.month // 12)
+            month = current.month % 12 + 1
+
+            day = min(
+                series.anchor_date.day,
+                monthrange(year, month)[1],
+            )
+
+            current = date(year, month, day)
+        else:
+            current += timedelta(days=series.interval_days)
+
+        if current > horizon_end:
+            break
+
         if current >= horizon_start:
             if (
                 series.terminated_after is None
@@ -138,9 +156,9 @@ def _occurrence_dates(
             ):
                 dates.append(current)
 
-        current += timedelta(days=series.interval_days)
-
     return tuple(dates)
+
+  
 
 
 def build_spending_candidates(
@@ -433,13 +451,11 @@ def _flow_matches_candidate(
     candidate: SpendingChangeCandidate,
 ) -> bool:
     """
-    Match a forecast flow to a recurring series.
+    Match a forecast flow to a spending-change candidate.
 
-    Synthetic recurring flows are identified by:
-
-        series:<series_id>:<date>
-
-    Concrete future events remain protected from accidental replacement.
+    Candidates may correspond either to:
+      - concrete future events, identified by event_id, or
+      - synthetic recurring occurrences, identified by series_id.
     """
 
     flow_date, _, _, synthetic, flow_id = _flow_parts(flow)
@@ -447,9 +463,11 @@ def _flow_matches_candidate(
     if flow_date not in candidate.occurrence_dates:
         return False
 
+    # Concrete future event: match its actual event ID.
     if not synthetic:
-        return False
+        return flow_id == candidate.event_id
 
+    # Synthetic recurring occurrence: match its series.
     if flow_id == candidate.series_id:
         return True
 

@@ -1,0 +1,218 @@
+{
+  "message:message_75": [
+    {
+      "source_id": "message_75",
+      "target_id": "event_9420",
+      "relation": "settlement",
+      "confidence": 0.95,
+      "new_amount": null,
+      "new_currency": null,
+      "new_date": null,
+      "effective_date": null
+    }
+  ],
+  "message:message_76": [
+    {
+      "source_id": "message_76",
+      "target_id": null,
+      "relation": "uncertainty",
+      "confidence": 0.9,
+      "new_amount": null,
+      "new_currency": null,
+      "new_date": null,
+      "effective_date": null
+    }
+  ],
+  "message:message_77": [
+    {
+      "source_id": "message_77",
+      "target_id": null,
+      "relation": "amendment",
+      "confidence": 0.95,
+      "new_amount": 164880.0,
+      "new_currency": "INR",
+      "new_date": null,
+      "effective_date": null
+    }
+  ],
+  "message:message_78": [
+    {
+      "source_id": "message_78",
+      "target_id": null,
+      "relation": "uncertainty",
+      "confidence": 0.95,
+      "new_amount": null,
+      "new_currency": null,
+      "new_date": null,
+      "effective_date": null
+    }
+  ],
+  "message:message_79": [
+    {
+      "source_id": "message_79",
+      "target_id": null,
+      "relation": "unrelated",
+      "confidence": 0.95,
+      "new_amount": null,
+      "new_currency": null,
+      "new_date": null,
+      "effective_date": null
+    }
+  ],
+  "message:message_80": [
+    {
+      "source_id": "message_80",
+      "target_id": null,
+      "relation": "confirmation",
+      "confidence": 0.95,
+      "new_amount": 1815.0,
+      "new_currency": "EUR",
+      "new_date": "2024-12-15",
+      "effective_date": null
+    }
+  ],
+  "message:message_94": [
+    {
+      "source_id": "message_94",
+      "target_id": null,
+      "relation": "uncertainty",
+      "confidence": 0.95,
+      "new_amount": null,
+      "new_currency": null,
+      "new_date": null,
+      "effective_date": null
+    }
+  ],
+  "message:message_95": [
+    {
+      "source_id": "message_95",
+      "target_id": null,
+      "relation": "confirmation",
+      "confidence": 0.95,
+      "new_amount": 748.0,
+      "new_currency": "EUR",
+      "new_date": "2025-11-15",
+      "effective_date": null
+    }
+  ],
+  "message:message_96": [
+    {
+      "source_id": "message_96",
+      "target_id": null,
+      "relation": "uncertainty",
+      "confidence": 0.95,
+      "new_amount": null,
+      "new_currency": null,
+      "new_date": null,
+      "effective_date": null
+    }
+  ],
+  "message:message_97": [
+    {
+      "source_id": "message_97",
+      "target_id": null,
+      "relation": "amendment",
+      "confidence": 0.95,
+      "new_amount": 50160.0,
+      "new_currency": "ZAR",
+      "new_date": "2024-09-15",
+      "effective_date": "2024-09-15"
+    }
+  ],
+  "message:message_98": [
+    {
+      "source_id": "message_98",
+      "target_id": null,
+      "relation": "uncertainty",
+      "confidence": 0.95,
+      "new_amount": null,
+      "new_currency": null,
+      "new_date": null,
+      "effective_date": null
+    }
+  ],
+  "message:message_99": [
+    {
+      "source_id": "message_99",
+      "target_id": "event_11925",
+      "relation": "settlement",
+      "confidence": 0.95,
+      "new_amount": null,
+      "new_currency": null,
+      "new_date": null,
+      "effective_date": null
+    }
+  ],
+  "message:message_137": [
+    {
+      "source_id": "message_137",
+      "target_id": null,
+      "relation": "confirmation",
+      "confidence": 0.95,
+      "new_amount": 1284.0,
+      "new_currency": "USD",
+      "new_date": "2025-11-15",
+      "effective_date": null
+    }
+  ],
+  "message:message_138": [
+    {
+      "source_id": "message_138",
+      "target_id": null,
+      "relation": "amendment",
+      "confidence": 0.95,
+      "new_amount": 1924.56,
+      "new_currency": "EUR",
+      "new_date": null,
+      "effective_date": null
+    }
+  ],
+  "message:message_139": [
+    {
+      "source_id": "message_139",
+      "target_id": null,
+      "relation": "uncertainty",
+      "confidence": 0.95,
+      "new_amount": null,
+      "new_currency": null,
+      "new_date": null,
+      "effective_date": null
+    }
+  ],
+  "message:message_140": [
+    {
+      "source_id": "message_140",
+      "target_id": null,
+      "relation": "amendment",
+      "confidence": 0.95,
+      "new_amount": 1731.6,
+      "new_currency": "USD",
+      "new_date": null,
+      "effective_date": null
+    }
+  ],
+  "message:message_141": [
+    {
+      "source_id": "message_141",
+      "target_id": null,
+      "relation": "confirmation",
+      "confidence": 0.95,
+      "new_amount": 2376,
+      "new_currency": "EUR",
+      "new_date": "2024-12-15",
+      "effective_date": null
+    }
+  ],
+  "message:message_142": [
+    {
+      "source_id": "message_142",
+      "target_id": null,
+      "relation": "uncertainty",
+      "confidence": 0.95,
+      "new_amount": null,
+      "new_currency": null,
+      "new_date": null,
+      "effective_date": null
+    }
+  ]
+}

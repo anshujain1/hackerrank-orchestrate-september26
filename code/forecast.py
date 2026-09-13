@@ -100,7 +100,7 @@ def _occurrence_dates(series, horizon_start, horizon_end):
     current = series.anchor_date
 
     while True:
-        if series.interval_days == 30:
+        if series.interval_days in (30, 31):
             current = _next_month_same_day(current)
         else:
             current += timedelta(days=series.interval_days)

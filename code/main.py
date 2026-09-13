@@ -61,9 +61,9 @@ def main() -> None:
     usage = UsageTracker()
 
     resolver = EvidenceResolver(
-        model="claude-sonnet-4-6",
-        usage_tracker=usage,
-    )
+    model="gemini-3.6-flash",
+    usage_tracker=usage,
+)
 
     rows = []
 
