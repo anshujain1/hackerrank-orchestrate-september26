@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from calendar import monthrange
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -85,35 +85,31 @@ def _series_amount_on(
 
     return amount
 
+def _next_month_same_day(d: date) -> date:
+    if d.month == 12:
+        year = d.year + 1
+        month = 1
+    else:
+        year = d.year
+        month = d.month + 1
 
-def _occurrence_dates(
-    series: RecurringSeries,
-    horizon_start: date,
-    horizon_end: date,
-):
-    """
-    Generate recurring occurrence dates within the forecast horizon.
+    day = min(d.day, monthrange(year, month)[1])
+    return date(year, month, day)
 
-    The first projected occurrence is strictly after anchor_date.
-    """
+def _occurrence_dates(series, horizon_start, horizon_end):
+    current = series.anchor_date
 
-    if series.interval_days <= 0:
-        return
+    while True:
+        if series.interval_days == 30:
+            current = _next_month_same_day(current)
+        else:
+            current += timedelta(days=series.interval_days)
 
-    if horizon_start > horizon_end:
-        return
+        if current > horizon_end:
+            break
 
-    current = series.anchor_date + timedelta(
-        days=series.interval_days
-    )
-
-    while current <= horizon_end:
         if current >= horizon_start:
             yield current
-
-        current += timedelta(
-            days=series.interval_days
-        )
 
 
 # ---------------------------------------------------------------------------
