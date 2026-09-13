@@ -1233,28 +1233,78 @@ def decide(
                 AffordabilityStatus
                 .AFFORDABLE_WITH_PLAN
             )
-
     # ---------------------------------------------------------------
     # 6. FINAL IMMUTABLE DECISION
     # ---------------------------------------------------------------
+
+    if chosen.payment_method == PaymentMethod.WAIT:
+        if earliest_full_payment_date is not None:
+            explanation = (
+                "The requested amount is not safely payable today while "
+                "maintaining the required minimum balance. "
+                f"Full payment is expected to become safe on "
+                f"{earliest_full_payment_date.isoformat()}."
+            )
+        else:
+            explanation = (
+                "The requested amount cannot be safely paid while "
+                "maintaining the required minimum balance."
+            )
+
+    elif chosen.payment_method == PaymentMethod.NOT_RECOMMENDED:
+        explanation = (
+            "The requested amount cannot be safely paid while "
+            "maintaining the required minimum balance under the "
+            "available payment options."
+        )
+
+    elif chosen.payment_method == PaymentMethod.FULL_PAYMENT:
+        if chosen.spending_changes:
+            changes = ", ".join(
+                change.event_id
+                for change in chosen.spending_changes
+            )
+            explanation = (
+                "The payment can be made in full after applying the "
+                f"allowed spending changes: {changes}. "
+                f"The baseline safe-to-pay amount is "
+                f"{amount_safe_to_pay:.2f}."
+            )
+        else:
+            explanation = (
+                "The requested amount can be paid in full while "
+                "maintaining the required minimum balance."
+            )
+
+    elif chosen.payment_method == PaymentMethod.INSTALLMENTS:
+        explanation = (
+            "Pay using the selected installment plan. "
+            "The scheduled payments remain within the available "
+            "cash-flow constraints while maintaining the required "
+            "minimum balance."
+        )
+
+    elif chosen.payment_method == PaymentMethod.PARTIAL_PAYMENT:
+        explanation = (
+            "Make the safe partial payment now and pay the remaining "
+            "balance on the earliest safe date."
+        )
+
+    else:
+        explanation = (
+            "The selected payment plan satisfies the available "
+            "cash-flow constraints."
+        )
 
     decision = Decision(
         request_id=req.request_id,
         amount_safe_to_pay=amount_safe_to_pay,
         affordability_status=status,
-        recommended_payment_method=(
-            chosen.payment_method
-        ),
-        payment_plan=tuple(
-            chosen.payments
-        ),
-        earliest_date_for_full_payment=(
-            earliest_full_payment_date
-        ),
-        spending_changes_needed=tuple(
-            chosen.spending_changes
-        ),
-        decision_explanation="",
+        recommended_payment_method=chosen.payment_method,
+        payment_plan=tuple(chosen.payments),
+        earliest_date_for_full_payment=earliest_full_payment_date,
+        spending_changes_needed=tuple(chosen.spending_changes),
+        decision_explanation=explanation,
     )
 
     return (
@@ -1262,7 +1312,6 @@ def decide(
         amount_safe_to_pay,
         earliest_full_payment_date,
     )
-
 
 # ---------------------------------------------------------------------------
 # Convenience helper

@@ -183,18 +183,60 @@ def _typical_amount(
     facts: list[FinancialFact],
 ) -> Optional[Decimal]:
     """
-    Use the median historical amount as the base recurring amount.
+    Determine the current recurring amount.
 
-    This is more robust than using the latest occurrence, which could be
-    an unusual spike.
+    Rules:
+    - Ignore unresolved/non-positive amounts.
+    - If the latest amount appears in two consecutive occurrences,
+      treat it as the current recurring amount. This captures persistent
+      salary cuts, raises, rent changes, etc.
+    - Otherwise use the median of the most recent three occurrences,
+      which smooths a single unusual transaction.
     """
-    amounts = _positive_amounts(facts)
+
+    ordered = sorted(
+        (
+            fact
+            for fact in facts
+            if (
+                fact.home_currency_amount is not None
+                and fact.home_currency_amount > 0
+                and fact.amount is not None
+                and fact.amount > 0
+            )
+        ),
+        key=lambda fact: (
+            fact.settlement_date or fact.date,
+            fact.date,
+            fact.event_id,
+        ),
+    )
+
+    if not ordered:
+        return None
+
+    amounts = [
+        fact.amount
+        for fact in ordered
+        if fact.amount is not None and fact.amount > 0
+    ]
 
     if not amounts:
         return None
 
+    latest_amount = amounts[-1]
+
+    # A repeated latest amount is strong evidence of a persistent
+    # recurring-state change rather than a one-off anomaly.
+    if len(amounts) >= 2 and amounts[-2] == latest_amount:
+        return latest_amount
+
+    # Otherwise smooth recent history so a single unusual occurrence
+    # does not redefine the recurring series.
+    recent_amounts = amounts[-3:]
+
     return Decimal(
-        str(statistics.median(amounts))
+        str(statistics.median(recent_amounts))
     )
 
 
