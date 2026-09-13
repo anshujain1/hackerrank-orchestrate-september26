@@ -1,6 +1,6 @@
 from __future__ import annotations
-
-import base64
+from google import genai
+from google.genai import types
 import json
 import os
 import re
@@ -247,7 +247,7 @@ class EvidenceResolver:
 
     def __init__(
         self,
-        model: str = "claude-sonnet-4-6",
+        model: str = "gemini-3.6-flash",
         usage_tracker=None,
     ):
         self.model = model
@@ -266,17 +266,16 @@ class EvidenceResolver:
         if self._client is not None:
             return self._client
 
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        api_key = os.environ.get("GEMINI_API_KEY")
 
         if not api_key:
             return None
 
         try:
-            import anthropic
-        except ImportError:
+            self._client = genai.Client(api_key=api_key)
+        except Exception:
             return None
 
-        self._client = anthropic.Anthropic(api_key=api_key)
         return self._client
 
     # ------------------------------------------------------------------
@@ -397,37 +396,29 @@ class EvidenceResolver:
             }
 
             try:
-                response = client.messages.create(
+                response = client.models.generate_content(
                     model=self.model,
-                    max_tokens=1000,
-                    system=MESSAGE_SYSTEM_PROMPT,
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": json.dumps(
-                                payload,
-                                ensure_ascii=False,
-                            ),
-                        }
-                    ],
+                    contents=(
+                        MESSAGE_SYSTEM_PROMPT
+                        + "\n\nMESSAGE DATA:\n"
+                        + json.dumps(payload, ensure_ascii=False)
+                    ),
                 )
             except Exception:
                 # Evidence extraction must never crash the entire pipeline.
                 return None
 
             if self.usage_tracker:
+                usage = getattr(response, "usage_metadata", None)
                 self.usage_tracker.record(
-                    "message_analysis",
-                    self.model,
-                    response.usage.input_tokens,
-                    response.usage.output_tokens,
+                    model=self.model,
+                    input_tokens=getattr(usage, "prompt_token_count", 0),
+                    output_tokens=getattr(usage, "candidates_token_count", 0),
+                    cached_input_tokens=getattr(usage, "cached_content_token_count", 0),
+                    operation="message_analysis",
                 )
 
-            text = "".join(
-                block.text
-                for block in response.content
-                if getattr(block, "type", None) == "text"
-            )
+            text = response.text or ""
 
             raw = _extract_json(text)
 
@@ -537,9 +528,7 @@ class EvidenceResolver:
 
             try:
                 with open(image.path, "rb") as handle:
-                    image_b64 = base64.standard_b64encode(
-                        handle.read()
-                    ).decode("utf-8")
+                    image_bytes = handle.read()
 
                 prompt = IMAGE_PROMPT.format(
                     event_id=event.event_id,
@@ -551,27 +540,14 @@ class EvidenceResolver:
                     event_date=event.event_date,
                 )
 
-                response = client.messages.create(
+                response = client.models.generate_content(
                     model=self.model,
-                    max_tokens=500,
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "image",
-                                    "source": {
-                                        "type": "base64",
-                                        "media_type": "image/png",
-                                        "data": image_b64,
-                                    },
-                                },
-                                {
-                                    "type": "text",
-                                    "text": prompt,
-                                },
-                            ],
-                        }
+                    contents=[
+                        prompt,
+                        types.Part.from_bytes(
+                            data=image_bytes,
+                            mime_type="image/png",
+                        ),
                     ],
                 )
 
@@ -579,18 +555,16 @@ class EvidenceResolver:
                 return None
 
             if self.usage_tracker:
+                usage = getattr(response, "usage_metadata", None)
                 self.usage_tracker.record(
-                    "vision_extraction",
-                    self.model,
-                    response.usage.input_tokens,
-                    response.usage.output_tokens,
+                    model=self.model,
+                    input_tokens=getattr(usage, "prompt_token_count", 0),
+                    output_tokens=getattr(usage, "candidates_token_count", 0),
+                    cached_input_tokens=getattr(usage, "cached_content_token_count", 0),
+                    operation="vision_extraction",
                 )
 
-            text = "".join(
-                block.text
-                for block in response.content
-                if getattr(block, "type", None) == "text"
-            )
+            text = response.text or ""
 
             result = _extract_json(text)
 

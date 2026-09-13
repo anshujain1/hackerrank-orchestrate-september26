@@ -11,13 +11,15 @@ from evidence import EvidenceResolver
 from canonicalize import canonicalize_user
 from series import build_series
 from planner import plan_request
+from usage import UsageTracker
 
 
 ROOT = Path(__file__).resolve().parent.parent
 DATASET_DIR = ROOT / "dataset"
 OUTPUT_PATH = ROOT / "output.csv"
 
-HORIZON_DAYS_AFTER_DEADLINE = 365
+
+HORIZON_DAYS = 90
 
 
 def money(value: Decimal) -> str:
@@ -25,7 +27,9 @@ def money(value: Decimal) -> str:
 
 
 def payment_plan_text(decision) -> str:
-    return ";".join(
+    if not decision.payment_plan:
+        return "none"
+    return "|".join(
         f"{payment.payment_date.isoformat()}:{money(payment.amount)}"
         for payment in decision.payment_plan
     )
@@ -46,7 +50,7 @@ def spending_changes_text(decision) -> str:
                 f"{action}:{change.event_id}"
             )
 
-    return ";".join(parts)
+    return "|".join(parts) if parts else "none"
 
 
 def main() -> None:
@@ -54,9 +58,11 @@ def main() -> None:
 
     fx = FxConverter(dataset.exchange_rates)
 
+    usage = UsageTracker()
+
     resolver = EvidenceResolver(
         model="claude-sonnet-4-6",
-        usage_tracker=None,
+        usage_tracker=usage,
     )
 
     rows = []
@@ -142,19 +148,16 @@ def main() -> None:
         # ---------------------------------------------------------------
         # Forecast horizon
         #
-        # Start on the request date. Extend beyond the requested deadline
-        # so that "earliest safe payment date" can be determined when the
-        # request cannot be completed by its desired date.
+        # Per problem_statement.md: "Forecast the user's balance for the
+        # next 90 days." earliest_date_for_full_payment must be left empty
+        # when the full amount isn't expected to become safe within THAT
+        # window - not an arbitrarily long one. A wider window here made
+        # almost everything "eventually" safe and answered a different
+        # question than the one being asked.
         # ---------------------------------------------------------------
 
         horizon_start = request.request_date
-
-        horizon_end = (
-            request.desired_completion_date
-            + timedelta(
-                days=HORIZON_DAYS_AFTER_DEADLINE
-            )
-        )
+        horizon_end = horizon_start + timedelta(days=HORIZON_DAYS)
 
         options = dataset.payment_options_by_request.get(
             request.request_id,
@@ -170,13 +173,6 @@ def main() -> None:
             horizon_start=horizon_start,
             horizon_end=horizon_end,
         )
-
-        if not rows:
-            print(
-                "DEBUG DECISION:",
-                repr(decision.decision_explanation),
-                repr(decision.spending_changes_needed),
-            )
 
         rows.append(
             {
@@ -234,6 +230,10 @@ def main() -> None:
     print(
         f"Wrote {len(rows)} decisions to {OUTPUT_PATH}"
     )
+
+    usage_report_path = ROOT / "code" / "evaluation" / "usage_report.md"
+    usage.save(str(usage_report_path), num_requests=len(rows))
+    print(f"Wrote usage report to {usage_report_path}")
 
 
 if __name__ == "__main__":
